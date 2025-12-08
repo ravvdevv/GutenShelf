@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import BookCard from "@/components/BookCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiCache } from "@/lib/cache";
+import type { Book } from "../../../shared/src/types";
 
 const SkeletonCard = () => (
   <div className="rounded-lg shadow-md overflow-hidden bg-white dark:bg-gray-800 animate-pulse">
@@ -18,7 +19,7 @@ const SkeletonCard = () => (
 );
 
 export default function FeaturedBooks() {
-  const [books, setBooks] = useState<any[]>([]);
+  const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +27,7 @@ export default function FeaturedBooks() {
     const fetchBooks = async () => {
       // Check cache first
       const cacheKey = 'featured-books';
-      const cachedData = apiCache.get<any[]>(cacheKey);
+      const cachedData = apiCache.get<Book[]>(cacheKey);
       
       if (cachedData) {
         setBooks(cachedData);

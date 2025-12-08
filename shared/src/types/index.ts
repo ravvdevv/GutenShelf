@@ -15,3 +15,10 @@ export type ApiResponse = {
   message: string;
   success: boolean;
 };
+
+export type GutendexResponse = {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: Book[];
+};

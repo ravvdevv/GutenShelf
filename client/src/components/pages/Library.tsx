@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { memo } from "react";
 import { apiCache } from "@/lib/cache";
+import type { Book, GutendexResponse } from "../../../shared/src/types";
 
 const SkeletonCard = () => (
   <div className="rounded-lg shadow overflow-hidden">
@@ -54,7 +55,7 @@ const EmptyLibraryState = () => (
   </div>
 );
 
-const BookGrid = memo(({ books }: { books: any[] }) => (
+const BookGrid = memo(({ books }: { books: Book[] }) => (
   <motion.div
     layout
     className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
@@ -76,7 +77,7 @@ const BookGrid = memo(({ books }: { books: any[] }) => (
 ));
 
 export default function Library() {
-  const [books, setBooks] = useState<any[]>([]);
+  const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -106,7 +107,7 @@ export default function Library() {
     const fetchBooks = async () => {
       // Check cache first - encode search term to avoid cache key collisions
       const cacheKey = `books-${encodeURIComponent(debouncedTerm)}-${currentPage}`;
-      const cachedData = apiCache.get<any>(cacheKey);
+      const cachedData = apiCache.get<GutendexResponse>(cacheKey);
       
       if (cachedData) {
         setBooks(cachedData.results);
