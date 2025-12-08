@@ -1,8 +1,9 @@
 import BookCard from "@/components/BookCard";
 import { useState, useEffect, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Frown, BookOpen, Search } from "lucide-react";
+import { Frown, BookOpen, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { memo } from "react";
 import { apiCache } from "@/lib/cache";
@@ -80,6 +81,10 @@ export default function Library() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedTerm, setDebouncedTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrevious, setHasPrevious] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // 🔄 Debounce Search Input
@@ -87,6 +92,7 @@ export default function Library() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setDebouncedTerm(searchTerm);
+      setCurrentPage(1); // Reset to first page on new search
     }, 400);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -99,11 +105,13 @@ export default function Library() {
     
     const fetchBooks = async () => {
       // Check cache first
-      const cacheKey = `books-${debouncedTerm}`;
-      const cachedData = apiCache.get<any[]>(cacheKey);
+      const cacheKey = `books-${debouncedTerm}-${currentPage}`;
+      const cachedData = apiCache.get<any>(cacheKey);
       
       if (cachedData) {
-        setBooks(cachedData);
+        setBooks(cachedData.results);
+        setHasNext(!!cachedData.next);
+        setHasPrevious(!!cachedData.previous);
         setLoading(false);
         return;
       }
@@ -112,16 +120,23 @@ export default function Library() {
       setError(null);
       try {
         const res = await fetch(
-          `https://gutendex.com/books?search=${debouncedTerm}`,
+          `https://gutendex.com/books?search=${debouncedTerm}&page=${currentPage}`,
           { signal: abortController.signal }
         );
         if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
         const data = await res.json();
-        const results = data.results || [];
         
-        // Cache the results
-        apiCache.set(cacheKey, results);
-        setBooks(results);
+        // Cache the entire response (includes pagination info)
+        apiCache.set(cacheKey, data);
+        
+        setBooks(data.results || []);
+        setHasNext(!!data.next);
+        setHasPrevious(!!data.previous);
+        
+        // Calculate total pages (approximate based on count)
+        if (data.count) {
+          setTotalPages(Math.ceil(data.count / 32)); // Gutendex returns 32 items per page
+        }
       } catch (err) {
         // Ignore abort errors
         if (err instanceof Error && err.name === 'AbortError') {
@@ -136,11 +151,11 @@ export default function Library() {
     
     fetchBooks();
     
-    // Cleanup: abort fetch on unmount or when debouncedTerm changes
+    // Cleanup: abort fetch on unmount or when dependencies change
     return () => {
       abortController.abort();
     };
-  }, [debouncedTerm]);
+  }, [debouncedTerm, currentPage]);
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -161,7 +176,37 @@ export default function Library() {
       ) : error ? (
         <ErrorState error={error} />
       ) : books.length > 0 ? (
-        <BookGrid books={books} />
+        <>
+          <BookGrid books={books} />
+          {/* Pagination Controls */}
+          {(hasNext || hasPrevious) && (
+            <div className="flex items-center justify-center gap-4 mt-12">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={!hasPrevious}
+                className="flex items-center gap-2"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                Page {currentPage} {totalPages > 1 && `of ${totalPages}`}
+              </span>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => setCurrentPage(p => p + 1)}
+                disabled={!hasNext}
+                className="flex items-center gap-2"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </>
       ) : searchTerm ? (
         <NoResultsState searchTerm={searchTerm} />
       ) : (
