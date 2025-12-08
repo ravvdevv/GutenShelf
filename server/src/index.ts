@@ -20,7 +20,8 @@ export const app = new Hono()
 .get("/api/books", async (c) => {
   const search = c.req.query("search") || "";
   const page = c.req.query("page") || "1";
-  const cacheKey = `books-${search}-${page}`;
+  // Encode search term to prevent cache key collisions with special characters
+  const cacheKey = `books-${encodeURIComponent(search)}-${page}`;
 
   // Check cache first
   const cachedData = serverCache.get(cacheKey);
