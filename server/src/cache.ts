@@ -11,7 +11,7 @@ interface CacheEntry<T> {
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
 class ServerCache {
-  private cache: Map<string, CacheEntry<any>> = new Map();
+  private cache: Map<string, CacheEntry<unknown>> = new Map();
 
   get<T>(key: string): T | null {
     const entry = this.cache.get(key);

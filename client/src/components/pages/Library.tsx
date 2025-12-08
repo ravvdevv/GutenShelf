@@ -104,8 +104,8 @@ export default function Library() {
     const abortController = new AbortController();
     
     const fetchBooks = async () => {
-      // Check cache first
-      const cacheKey = `books-${debouncedTerm}-${currentPage}`;
+      // Check cache first - encode search term to avoid cache key collisions
+      const cacheKey = `books-${encodeURIComponent(debouncedTerm)}-${currentPage}`;
       const cachedData = apiCache.get<any>(cacheKey);
       
       if (cachedData) {
