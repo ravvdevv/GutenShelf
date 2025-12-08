@@ -4,6 +4,8 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import BookCard from "@/components/BookCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiCache } from "@/lib/cache";
+import type { Book } from "../../../shared/src/types";
 
 const SkeletonCard = () => (
   <div className="rounded-lg shadow-md overflow-hidden bg-white dark:bg-gray-800 animate-pulse">
@@ -17,19 +19,35 @@ const SkeletonCard = () => (
 );
 
 export default function FeaturedBooks() {
-  const [books, setBooks] = useState<any[]>([]);
+  const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchBooks = async () => {
+      // Check cache first
+      const cacheKey = 'featured-books';
+      const cachedData = apiCache.get<Book[]>(cacheKey);
+      
+      if (cachedData) {
+        setBooks(cachedData);
+        setIsLoading(false);
+        return;
+      }
+
       try {
-        const response = await fetch("https://gutendex.com/books");
+        // Only fetch 3 books for featured section to reduce data transfer
+        const response = await fetch("https://gutendex.com/books?page=1");
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        setBooks(data.results);
+        // Only take first 3 results
+        const featuredBooks = data.results.slice(0, 3);
+        
+        // Cache the results
+        apiCache.set(cacheKey, featuredBooks);
+        setBooks(featuredBooks);
       } catch (err) {
         console.error("Error fetching books:", err);
         setError("Failed to load featured books. Try again later.");
@@ -65,7 +83,7 @@ export default function FeaturedBooks() {
               No featured books at the moment. Check back soon!
             </div>
           ) : (
-            books.slice(0, 3).map((book, index) => (
+            books.map((book, index) => (
               <motion.div
                 key={book.id}
                 initial={{ opacity: 0, y: 20 }}

@@ -1,10 +1,13 @@
 import BookCard from "@/components/BookCard";
 import { useState, useEffect, useRef } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Frown, BookOpen, Search } from "lucide-react";
+import { Frown, BookOpen, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { memo } from "react";
+import { apiCache } from "@/lib/cache";
+import type { Book, GutendexResponse } from "../../../shared/src/types";
 
 const SkeletonCard = () => (
   <div className="rounded-lg shadow overflow-hidden">
@@ -52,7 +55,7 @@ const EmptyLibraryState = () => (
   </div>
 );
 
-const BookGrid = memo(({ books }: { books: any[] }) => (
+const BookGrid = memo(({ books }: { books: Book[] }) => (
   <motion.div
     layout
     className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"
@@ -74,11 +77,15 @@ const BookGrid = memo(({ books }: { books: any[] }) => (
 ));
 
 export default function Library() {
-  const [books, setBooks] = useState<any[]>([]);
+  const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedTerm, setDebouncedTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrevious, setHasPrevious] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // 🔄 Debounce Search Input
@@ -86,6 +93,7 @@ export default function Library() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setDebouncedTerm(searchTerm);
+      setCurrentPage(1); // Reset to first page on new search
     }, 400);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -94,23 +102,61 @@ export default function Library() {
 
   // 📚 Fetch Books
   useEffect(() => {
+    const abortController = new AbortController();
+    
     const fetchBooks = async () => {
+      // Check cache first - encode search term to avoid cache key collisions
+      const cacheKey = `books-${encodeURIComponent(debouncedTerm)}-${currentPage}`;
+      const cachedData = apiCache.get<GutendexResponse>(cacheKey);
+      
+      if (cachedData) {
+        setBooks(cachedData.results);
+        setHasNext(!!cachedData.next);
+        setHasPrevious(!!cachedData.previous);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`https://gutendex.com/books?search=${debouncedTerm}`);
+        const res = await fetch(
+          `https://gutendex.com/books?search=${debouncedTerm}&page=${currentPage}`,
+          { signal: abortController.signal }
+        );
         if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
         const data = await res.json();
+        
+        // Cache the entire response (includes pagination info)
+        apiCache.set(cacheKey, data);
+        
         setBooks(data.results || []);
+        setHasNext(!!data.next);
+        setHasPrevious(!!data.previous);
+        
+        // Calculate total pages (approximate based on count)
+        if (data.count) {
+          setTotalPages(Math.ceil(data.count / 32)); // Gutendex returns 32 items per page
+        }
       } catch (err) {
+        // Ignore abort errors
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
         console.error(err);
         setError("Could not fetch books. Try again later.");
       } finally {
         setLoading(false);
       }
     };
+    
     fetchBooks();
-  }, [debouncedTerm]);
+    
+    // Cleanup: abort fetch on unmount or when dependencies change
+    return () => {
+      abortController.abort();
+    };
+  }, [debouncedTerm, currentPage]);
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -131,7 +177,37 @@ export default function Library() {
       ) : error ? (
         <ErrorState error={error} />
       ) : books.length > 0 ? (
-        <BookGrid books={books} />
+        <>
+          <BookGrid books={books} />
+          {/* Pagination Controls */}
+          {(hasNext || hasPrevious) && (
+            <div className="flex items-center justify-center gap-4 mt-12">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={!hasPrevious}
+                className="flex items-center gap-2"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <span className="text-sm text-gray-600 dark:text-gray-400">
+                Page {currentPage} {totalPages > 1 && `of ${totalPages}`}
+              </span>
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => setCurrentPage(p => p + 1)}
+                disabled={!hasNext}
+                className="flex items-center gap-2"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </>
       ) : searchTerm ? (
         <NoResultsState searchTerm={searchTerm} />
       ) : (
