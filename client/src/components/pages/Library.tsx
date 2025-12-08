@@ -5,6 +5,7 @@ import { Frown, BookOpen, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { motion, AnimatePresence } from "framer-motion";
 import { memo } from "react";
+import { apiCache } from "@/lib/cache";
 
 const SkeletonCard = () => (
   <div className="rounded-lg shadow overflow-hidden">
@@ -94,22 +95,51 @@ export default function Library() {
 
   // 📚 Fetch Books
   useEffect(() => {
+    const abortController = new AbortController();
+    
     const fetchBooks = async () => {
+      // Check cache first
+      const cacheKey = `books-${debouncedTerm}`;
+      const cachedData = apiCache.get<any[]>(cacheKey);
+      
+      if (cachedData) {
+        setBooks(cachedData);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`https://gutendex.com/books?search=${debouncedTerm}`);
+        const res = await fetch(
+          `https://gutendex.com/books?search=${debouncedTerm}`,
+          { signal: abortController.signal }
+        );
         if (!res.ok) throw new Error(`HTTP error: ${res.status}`);
         const data = await res.json();
-        setBooks(data.results || []);
+        const results = data.results || [];
+        
+        // Cache the results
+        apiCache.set(cacheKey, results);
+        setBooks(results);
       } catch (err) {
+        // Ignore abort errors
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
         console.error(err);
         setError("Could not fetch books. Try again later.");
       } finally {
         setLoading(false);
       }
     };
+    
     fetchBooks();
+    
+    // Cleanup: abort fetch on unmount or when debouncedTerm changes
+    return () => {
+      abortController.abort();
+    };
   }, [debouncedTerm]);
 
   return (
